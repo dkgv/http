@@ -22,7 +22,7 @@ impl ParamType {
     }
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq)]
 pub struct Route {
     endpoint: String,
     method: HttpMethod,
@@ -36,7 +36,7 @@ impl Route {
 
         for group in regex.captures_iter(endpoint) {
             let param_name = &group[0];
-            let param_type = match &group[1] {
+            let param_type = match group[1].to_lowercase().as_str() {
                 "int" => ParamType::Int,
                 "str" => ParamType::Str,
                 "float" => ParamType::Float,
