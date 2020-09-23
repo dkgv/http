@@ -2,13 +2,15 @@ mod request;
 mod response;
 mod route;
 
+use std::io;
+use regex::Regex;
 use route::{HttpMethod, Route};
 use request::{Request};
-use std::net::{SocketAddr, TcpListener};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use socket2::{Socket, Domain, Type};
 use std::collections::HashMap;
 
-type Handler = fn(request: request::Request) -> response::Response;
+type Handler = fn(request: Request) -> response::Response;
 
 struct HttpServer {
     port: i16,
@@ -44,20 +46,37 @@ impl HttpServer {
         let address = format!("127.0.0.1:{}", self.port);
         println!("Launching at {}...", address);
 
-        let socket = Socket::new(Domain::ipv4(), Type::stream(), None).unwrap();
+        let socket = Socket::new(Domain::ipv4(), Type::stream(), None).expect("Failed to bind to port.");
         socket.bind(&address.parse::<SocketAddr>().unwrap().into()).unwrap();
+        socket.set_nonblocking(true).expect("Failed to set non-blocking.");
         self.listen(socket.into_tcp_listener());
 
         println!("Done!");
     }
 
     async fn listen(self, listener: TcpListener) {
-        loop {
-            let result = listener.accept();
+        for stream in listener.incoming() {
+            match stream {
+                Ok(s) => {
+                    self.handle_request(&stream.unwrap());
+                }
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    continue;
+                }
+                Err(e) => panic!("IO Error: {}", e)
+            }
         }
     }
 
-    async fn handle_request(self, request: Request) {
-
+    async fn handle_request(self, stream: &TcpStream) {
+        let request = Request::new(stream);
+        let uri = &request.uri;
+        for (route, handler) in self.routes {
+            let regex = Regex::new(&route.regex).unwrap();
+            if regex.is_match(&uri) {
+                handler(request);
+                break;
+            }
+        }
     }
 }

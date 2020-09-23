@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::net::TcpStream;
 
 trait UriParam {
     fn parse(data: &String) -> Self;
@@ -23,12 +24,23 @@ impl UriParam for f32 {
 }
 
 pub struct Request {
-    uri: String,
+    pub uri: String,
     headers: HashMap<String, String>,
     params: HashMap<String, String>
 }
 
 impl Request {
+    pub fn new(stream: TcpStream) -> Request {
+        let uri = String::from("");
+        let headers = HashMap::new();
+        let params = HashMap::new();
+        Request {
+            uri: uri,
+            headers: headers,
+            params: params
+        }
+    }
+
     fn get_header(self, header: String) -> String {
         match self.headers.get(&header) {
             Some(val) => val.to_string(),
