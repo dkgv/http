@@ -1,5 +1,5 @@
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Eq, PartialEq, Hash)]
 pub enum HttpMethod {
@@ -22,18 +22,17 @@ impl ParamType {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Hash)]
 pub struct Route {
     method: HttpMethod,
-    params: HashMap<String, ParamType>,
+    params: BTreeMap<String, ParamType>,
     pub regex: String
 }
 
 impl Route {
     pub fn new(endpoint: &String, method: HttpMethod) -> Route {
         let param_matcher = Regex::new(r"<([A-Za-z]+):([A-Za-z]+)>").unwrap();
-        let mut params: HashMap<String, ParamType> = HashMap::new();
-
+        let mut params: BTreeMap<String, ParamType> = BTreeMap::new();
         let mut endpoint_regex = endpoint.clone();
 
         for group in param_matcher.captures_iter(endpoint) {

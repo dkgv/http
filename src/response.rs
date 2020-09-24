@@ -1,17 +1,35 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 pub struct Response {
-    response_code: i16,
-    properties: HashMap<String, String>,
-    body: &'static [u8]
+    pub properties: BTreeMap<String, String>,
+    pub body: &'static [u8],
 }
 
+impl Response {
+    pub fn new(status: i16, body: String) -> Response {
+        let mut properties: BTreeMap<String, String> = BTreeMap::new();
 
-pub trait ResponseBuilder {
-    fn make_response(body: String) -> Response;
+        properties.insert(
+            String::from("Status"),
+            format!("{} {}", status, http_message(status)),
+        );
+        properties.insert(
+            String::from("Content-Type"),
+            String::from("text/html; charset=UTF-8"),
+        );
+        
+        Response {
+            properties: properties,
+            body: body, // TODO
+        }
+    }
+
+    pub fn add_property(mut self, key: String, value: String) {
+        self.properties.insert(key, value);
+    }
 }
 
-fn code_to_message(code: i16) -> String {
+fn http_message(code: i16) -> String {
     let message = match code {
         100 => "Continue",
         101 => "Switching Protocols",
@@ -67,7 +85,7 @@ fn code_to_message(code: i16) -> String {
         502 => "Bad Gateway",
         503 => "Service Unavailable",
         504 => "Gateway Timeout",
-        505 => "HTTP Version Not Supported"
+        505 => "HTTP Version Not Supported",
     };
     String::from(message)
 }
