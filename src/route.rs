@@ -1,14 +1,18 @@
 use regex::Regex;
+use std::cmp::{Ord, PartialOrd};
 use std::collections::BTreeMap;
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash, Ord, PartialOrd, Clone)]
 pub enum HttpMethod {
-    Get, Post
+    Get,
+    Post,
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash, Clone, Ord, PartialOrd, Copy)]
 pub enum ParamType {
-    Str, Int, Float
+    Str,
+    Int,
+    Float,
 }
 
 impl ParamType {
@@ -16,17 +20,17 @@ impl ParamType {
         let regex = match self {
             ParamType::Str => r".+",
             ParamType::Int => r"[0-9]+",
-            ParamType::Float => r"[-+]?[0-9]*\.?[0-9]+"
+            ParamType::Float => r"[-+]?[0-9]*\.?[0-9]+",
         };
         String::from(regex)
     }
 }
 
-#[derive(Eq, PartialEq, Hash)]
+#[derive(Eq, PartialEq, Hash, Ord, PartialOrd, Clone)]
 pub struct Route {
     method: HttpMethod,
     params: BTreeMap<String, ParamType>,
-    pub regex: String
+    pub regex: String,
 }
 
 impl Route {
@@ -41,7 +45,7 @@ impl Route {
                 "int" => ParamType::Int,
                 "str" => ParamType::Str,
                 "float" => ParamType::Float,
-                _ => ParamType::Str
+                _ => ParamType::Str,
             };
             // Replace param with equivalent regex
             endpoint_regex = endpoint_regex.replace(&group[0], &param_type.regex());
@@ -51,7 +55,7 @@ impl Route {
         Route {
             method: method,
             params: params,
-            regex: endpoint_regex
+            regex: endpoint_regex,
         }
     }
 }

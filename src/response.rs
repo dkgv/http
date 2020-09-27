@@ -2,11 +2,11 @@ use std::collections::BTreeMap;
 
 pub struct Response {
     pub properties: BTreeMap<String, String>,
-    pub body: &'static [u8],
+    pub body: String,
 }
 
 impl Response {
-    pub fn new(status: i16, body: String) -> Response {
+    pub fn make(status: i16, body: &str) -> Response {
         let mut properties: BTreeMap<String, String> = BTreeMap::new();
 
         properties.insert(
@@ -17,11 +17,14 @@ impl Response {
             String::from("Content-Type"),
             String::from("text/html; charset=UTF-8"),
         );
-        
         Response {
             properties: properties,
-            body: body, // TODO
+            body: body.to_string(),
         }
+    }
+
+    pub fn ok(body: &str) -> Response {
+        Response::make(200, body)
     }
 
     pub fn add_property(mut self, key: String, value: String) {
@@ -86,6 +89,7 @@ fn http_message(code: i16) -> String {
         503 => "Service Unavailable",
         504 => "Gateway Timeout",
         505 => "HTTP Version Not Supported",
+        _ => "OK",
     };
     String::from(message)
 }

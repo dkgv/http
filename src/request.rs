@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-trait UriParam {
+pub trait UriParam {
     fn parse(data: &String) -> Self;
 }
 
@@ -22,14 +22,15 @@ impl UriParam for f32 {
     }
 }
 
+#[derive(Clone)]
 pub struct Request {
     pub uri: String,
     headers: HashMap<String, String>,
-    params: HashMap<String, String>
+    params: HashMap<String, String>,
 }
 
 impl Request {
-    pub fn new(request_line: String) -> Request {
+    pub fn new(request_line: &str) -> Request {
         let uri = String::from("");
         let headers = HashMap::new();
         let params = HashMap::new();
@@ -37,21 +38,21 @@ impl Request {
         Request {
             uri: uri,
             headers: headers,
-            params: params
+            params: params,
         }
     }
 
-    pub fn get_header(self, header: String) -> String {
-        match self.headers.get(&header) {
+    pub fn get_header(&self, header: &str) -> String {
+        match self.headers.get(header) {
             Some(val) => val.to_string(),
-            None => String::default()
+            None => String::default(),
         }
     }
 
-    pub fn get_param<T: UriParam>(self, name: String) -> T {
-        if !self.params.contains_key(&name) {
+    pub fn get_param<T: UriParam>(&self, name: &str) -> T {
+        if !self.params.contains_key(name) {
             panic!("Invalid parameter {}", name);
         }
-        UriParam::parse(self.params.get(&name).unwrap())
+        UriParam::parse(self.params.get(name).unwrap())
     }
 }

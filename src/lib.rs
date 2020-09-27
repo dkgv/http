@@ -1,41 +1,52 @@
-mod request;
-mod response;
-mod route;
+pub mod request;
+pub mod response;
+pub mod route;
 
+use futures;
 use regex::Regex;
 use request::Request;
 use response::Response;
 use route::{HttpMethod, Route};
 use socket2::{Domain, Socket, Type};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io;
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, Sender};
+use threadpool::ThreadPool;
 
-type Handler = fn(request: Request) -> response::Response;
+pub type Handler = fn(request: &Request) -> response::Response;
 
-struct HttpServer {
+pub struct HttpServer {
     port: i16,
-    routes: HashMap<Route, Handler>,
+    routes: BTreeMap<Route, Handler>,
+    workers: usize,
 }
 
 impl HttpServer {
     pub fn bind(port: i16) -> HttpServer {
         HttpServer {
             port: port,
-            routes: HashMap::new(),
+            routes: BTreeMap::new(),
+            workers: 16,
         }
     }
 
-    pub fn get(self, endpoint: &String, handler: Handler) -> HttpServer {
+    pub fn workers(mut self, workers: usize) -> HttpServer {
+        self.workers = workers;
+        self
+    }
+
+    pub fn get(self, endpoint: &str, handler: Handler) -> HttpServer {
         self.route(endpoint, HttpMethod::Get, handler)
     }
 
-    pub fn post(self, endpoint: &String, handler: Handler) -> HttpServer {
+    pub fn post(self, endpoint: &str, handler: Handler) -> HttpServer {
         self.route(endpoint, HttpMethod::Post, handler)
     }
 
-    pub fn route(mut self, endpoint: &String, method: HttpMethod, handler: Handler) -> HttpServer {
-        let route = Route::new(endpoint, method);
+    fn route(mut self, endpoint: &str, method: HttpMethod, handler: Handler) -> HttpServer {
+        let route = Route::new(&endpoint.to_string(), method);
         if self.routes.contains_key(&route) {
             panic!(
                 "Unable to define duplicate route {} with specified HTTP method.",
@@ -47,53 +58,61 @@ impl HttpServer {
     }
 
     pub fn launch(self) {
-        let address = format!("127.0.0.1:{}", self.port);
-        println!("Launching at {}...", address);
-
-        let socket =
-            Socket::new(Domain::ipv4(), Type::stream(), None).expect("Failed to bind to port.");
-        socket
-            .bind(&address.parse::<SocketAddr>().unwrap().into())
-            .unwrap();
-        socket
-            .set_nonblocking(true)
-            .expect("Failed to set non-blocking.");
-        self.listen(socket.into_tcp_listener());
-    }
-
-    async fn listen(self, listener: TcpListener) {
-        let routes = self.routes;
-        let mut incoming = listener.incoming();
-
-        while let Some(tcp_stream) = incoming.next() {
-            match tcp_stream {
-                Ok(s) => {
-                    handle_request(&s, &routes);
-                }
-                Err(e) => {
-                    if e.kind() == io::ErrorKind::WouldBlock {
-                        continue;
-                    }
-                    panic!("Error");
-                }
-            };
-        }
+        let runner = async {
+            let (tx, rx): (Sender<TcpStream>, Receiver<TcpStream>) = mpsc::channel();
+            let sender = listen_for_requests(self.port, tx);
+            let receiver = respond_to_requests(self.routes, self.workers, rx);
+            futures::join!(sender, receiver);
+        };
+        futures::executor::block_on(runner);
     }
 }
 
-async fn handle_request(stream: &TcpStream, routes: &HashMap<Route, Handler>) {
-    let request = Request::new("TODO GET /endpoint HTTP 1.1".to_string());
-    let uri = &request.uri;
-    for (route, handler) in routes {
-        let regex = Regex::new(&route.regex).unwrap();
-        if regex.is_match(&uri) {
-            dispatch_response(stream, handler(request)).await;
-            break;
-        }
+async fn listen_for_requests(port: i16, tx: Sender<TcpStream>) {
+    let s = Socket::new(Domain::ipv4(), Type::stream(), None).unwrap();
+    s.bind(
+        &format!("127.0.0.1:{}", port)
+            .parse::<SocketAddr>()
+            .unwrap()
+            .into(),
+    )
+    .expect("Failed to bind to port.");
+    s.set_nonblocking(true).expect("Non-blocking failed.");
+
+    let listener = s.into_tcp_listener();
+    let mut incoming = listener.incoming();
+    while let Some(tcp_stream) = incoming.next() {
+        match tcp_stream {
+            Ok(s) => tx.send(s).expect("Failed to send TcpStream."),
+            Err(e) => {
+                if e.kind() != io::ErrorKind::WouldBlock {
+                    panic!("Unexpected error");
+                }
+            }
+        };
     }
 }
 
-async fn dispatch_response(stream: &TcpStream, response: Response) {
-    let mut body = response.body;
-    // TODO write body
+async fn respond_to_requests(
+    routes: BTreeMap<Route, Handler>,
+    workers: usize,
+    rx: Receiver<TcpStream>,
+) {
+    let pool = ThreadPool::new(workers);
+    loop {
+        let routes = routes.clone();
+        let stream = rx.recv();
+        pool.execute(move || {
+            let request = Request::new("TODO GET /endpoint HTTP 1.1");
+            let uri = &request.uri;
+            for (route, handler) in routes {
+                let regex = Regex::new(&route.regex).unwrap();
+                if !regex.is_match(&uri) {
+                    continue;
+                }
+                let response = handler(&request);
+                // TODO somehow write to stream
+            }
+        });
+    }
 }
