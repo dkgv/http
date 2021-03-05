@@ -1,34 +1,42 @@
 use std::collections::BTreeMap;
 
 pub struct Response {
-    pub properties: BTreeMap<String, String>,
+    pub headers: BTreeMap<String, String>,
     pub body: String,
 }
 
 impl Response {
-    pub fn make(status: i16, body: &str) -> Response {
-        let mut properties: BTreeMap<String, String> = BTreeMap::new();
+    pub fn new(body: &str) -> Response {
+        let resp = Response {
+            headers: BTreeMap::new(),
+            body: body.to_string()
+        };
+        resp.add_header("Content-Type", "text/html; charset=UTF-8").status(200)
+    }
 
-        properties.insert(
-            String::from("Status"),
-            format!("{} {}", status, http_message(status)),
-        );
-        properties.insert(
-            String::from("Content-Type"),
-            String::from("text/html; charset=UTF-8"),
-        );
-        Response {
-            properties: properties,
-            body: body.to_string(),
+    pub fn status(self, status: i16) -> Response {
+        self.add_header("Status", &[status.to_string(), http_message(status)].join(" "))
+    }
+
+    pub fn content_type(self, content_type: &str) -> Response {
+        self.add_header("Content-Type", content_type)
+    }
+
+    pub fn add_header(mut self, key: &str, value: &str) -> Response {
+        self.headers.insert(String::from(key), String::from(value));
+        self
+    }
+
+    pub fn dump(self) -> String {
+        let mut sb:Vec<String> = Vec::new();
+        sb.push(["HTTP/1.1", self.headers.get("Status").unwrap()].join(" "));
+
+        for header in self.headers {
+            sb.push([&header.0, ":", &header.1].join(" "));
         }
-    }
 
-    pub fn ok(body: &str) -> Response {
-        Response::make(200, body)
-    }
-
-    pub fn add_property(mut self, key: String, value: String) {
-        self.properties.insert(key, value);
+        sb.push(self.body);
+        sb.join("\n")
     }
 }
 
